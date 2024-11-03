@@ -59,11 +59,11 @@ def compute_sliced_wass_barycenter(distributions, rho = None, lr = 1e3, k = 200,
     
     if xbinit is None:
         #xbinit = np.random.randn(500, 2) * 10 + 16 #initialization
-        xbinit = np.random.normal(0., 1., (k, d))
+        xbinit = np.random.normal(0., 1., distributions[0].shape)
     xbary_torch = torch.tensor(xbinit).to(device=device).requires_grad_(True)
 
 
-    x_all = np.zeros((nb_iter_max, xbary_torch.shape[0], 2))
+    x_all = np.zeros((nb_iter_max, xbary_torch.shape[0], d))
 
     loss_iter = []
 

@@ -1,11 +1,12 @@
 from PIL import Image 
 import numpy as np 
-import pywt
+import pywt 
 
-def preprocess_image(image_path, new_size = (256, 256)):
-    image = Image.open(image_path).convert('L')
+def preprocess_image(image_path, new_size = (256, 256), end = "RGB"):
+    image = Image.open(image_path)
+    image = image.convert(end)
     image = image.resize(new_size)
-    image = image / np.sum(image)  # Normalisation pour que la somme des pixels = 1
+    #image = image / np.sum(image)  # Normalisation pour que la somme des pixels = 1
     
     return image
 
