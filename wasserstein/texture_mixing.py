@@ -2,84 +2,17 @@ import numpy as np
 import torch
 from kymatio.numpy import Scattering2D
 import pyrtools as pt
-
-def compute_steerable_wavelet_atoms_with_extra_frames(image, J=4, L=4):
-    """
-    Compute steerable wavelet atoms ψ_{l,n} using Kymatio's Scattering2D transform,
-    including low-pass residual and high-frequency details.
-
-    Parameters:
-    - image: 2D numpy array, input grayscale image.
-    - J: int, the number of dyadic scales (2^J is the largest scale).
-    - L: int, number of orientations (angular resolution).
-
-    Returns:
-    - wavelet_coeffs: list of dictionaries with 'scale', 'orientation', 'coefficients'
-    """
-    # Initialize Scattering Transform
-    scattering = Scattering2D(J=J, shape=image.shape, L=L)
-    
-    # Convert image to tensor
-    image_tensor = torch.tensor(image, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
-    
-    # Perform scattering transform to get wavelet coefficients
-    S = scattering(image_tensor)
-    
-    # Convert back to numpy and organize by scale and orientation
-    S = S.squeeze().detach().numpy()
-    
-    # Retrieve metadata to identify low-pass residual
-    meta = scattering.meta()
-    
-    wavelet_coeffs = []
-    
-    # Step 1: Extract main scale-orientation coefficients
-    for i, (order, scale, orientation) in enumerate(zip(meta['order'], meta['scale'], meta['theta'])):
-        # Skip the low-pass component initially
-        if order == 0:
-            continue
-        coeffs = S[i]  # Specific coefficients for scale and orientation
-        wavelet_coeffs.append({
-            'scale': scale,
-            'orientation': orientation,
-            'coefficients': coeffs
-        })
-    
-    # Step 2: Extract low-pass residual (coarse scale frame)
-    # According to meta['order'], the low-pass residual is the first item (order == 0)
-    low_pass_residual = S[0]  # Low-pass residual based on metadata
-    wavelet_coeffs.append({
-        'scale': 'low-pass',
-        'orientation': None,
-        'coefficients': low_pass_residual
-    })
-    
-    # Step 3: Extract high-frequency details (difference with low-pass approximation)
-    # Ensure low_pass_residual is resized to the original image shape if needed
-    if low_pass_residual.shape != image.shape:
-        low_pass_residual_resized = np.resize(low_pass_residual, image.shape)
-    else:
-        low_pass_residual_resized = low_pass_residual
-    
-    high_frequency_details = image - low_pass_residual_resized
-    wavelet_coeffs.append({
-        'scale': 'high-pass',
-        'orientation': None,
-        'coefficients': high_frequency_details
-    })
-    
-    return wavelet_coeffs
-
+import tqdm
+from .basic_wasserstein import compute_wasserstein_sliced_distance, compute_sliced_wass_barycenter
+from joblib import Parallel, delayed
 
 def initialize_random_image(size=(256, 256), channels=3):
-    """Initialize a random white noise image."""
+    """Initialize a random white noise image f^(0)."""
     return np.random.rand(*size, channels)
 
-
-
-def compute_steerable_pyramid_coeffs(image, num_scales=3, num_orientations=4):
+def compute_3D_wavelets_coeffs(image, num_scales=4, num_orientations=4):
     """
-    Compute steerable pyramid coefficients with specified orientations using pyrtools.
+    Compute wavelets coefficients (highpass, bandpass, low-residuals) for the 3 channels (R,G,B) of an image
     
     Parameters:
     - image: 2D numpy array, input grayscale image.
@@ -87,26 +20,167 @@ def compute_steerable_pyramid_coeffs(image, num_scales=3, num_orientations=4):
     - num_orientations: int, number of orientations.
 
     Returns:
-    - coeffs: Dictionary of coefficients organized by scale and orientation.
+    - wavelets_coeffs: Dictionary of coefficients organized by channel (R,G,B) and then by bandpass (highpass, bandpass -scale and orientation- and low residual).
     """
-    # Initialize the steerable pyramid
-    pyramid = pt.pyramids.SteerablePyramidFreq(image, height=num_scales, order=num_orientations-1)
-    
-    # Print keys to confirm structure (for debugging)
-    #print("Available keys in pyramid coefficients:", pyramid.pyr_coeffs.keys())
+    image_r, image_g, image_b = image.split()
 
-    # Extract coefficients and organize them by scale and orientation
-    coeffs = {
-        'highpass': pyramid.pyr_coeffs['residual_highpass'],  # Adjust based on key inspection
-        'bandpass': {},  # Dictionary to hold bandpass coefficients by scale and orientation
-        'lowpass': pyramid.pyr_coeffs['residual_lowpass']    # Adjust based on key inspection
-    }
+    image_r = np.array(image_r)
+    image_g = np.array(image_g)
+    image_b = np.array(image_b)
+
+    pyr_r = pt.pyramids.SteerablePyramidFreq(image_r, height=num_scales, order=num_orientations-1)
+    pyr_g = pt.pyramids.SteerablePyramidFreq(image_g, height=num_scales, order=num_orientations-1)
+    pyr_b = pt.pyramids.SteerablePyramidFreq(image_b, height=num_scales, order=num_orientations-1)
+
+    return {'R': pyr_r.pyr_coeffs, 'G': pyr_g.pyr_coeffs, 'B': pyr_b.pyr_coeffs}
+
+def compute_wavelet_coeffs_barycenter(textures, num_scales=4, num_orientations=4):
+    """
+    Compute the barycenter of wavelet coefficients for RGB channels.
     
-    for scale in range(num_scales):
-        coeffs['bandpass'][scale] = {}
-        for orientation in range(num_orientations):
-            # Access bandpass coefficients at each scale and orientation
-            coeffs['bandpass'][scale][orientation] = pyramid.pyr_coeffs[(scale, orientation)]
+    Parameters:
+    - textures: 3D numpy array, input RGB image.
+    - num_scales: int, number of scales.
+    - num_orientations: int, number of orientations.
     
-    return coeffs
+    Returns:
+    - bar_wavelet_coeffs_RGB: Dictionary of barycenters of wavelet coefficients by channel (R, G, B) and then by highpass/bandpass/lowresidual.
+    """
+    RGB = ['R', 'G', 'B']
+    bar_wavelet_coeffs_RGB = {rgb: {} for rgb in RGB}  # Initialize each channel's dictionary
+
+    # Compute wavelet coefficients for all textures
+    wavelets_coeffs = [compute_3D_wavelets_coeffs(image) for image in textures]
+
+    # Define a helper function to compute barycenter for each color channel and coefficient type
+    def compute_barycenter(rgb, k):
+        distributions = [w[rgb][k].reshape(-1, 1) for w in wavelets_coeffs]
+        n = int(np.sqrt(distributions[0].shape[0]))
+        barycenter = compute_sliced_wass_barycenter(distributions, rho=None).reshape(n, n)
+        return rgb, k, barycenter
+
+    # Use Parallel to compute barycenters for each RGB channel and coefficient type in parallel
+    results = Parallel(n_jobs=-1)(
+        delayed(compute_barycenter)(rgb, k)
+        for rgb in RGB
+        for k in wavelets_coeffs[0][rgb].keys()
+    )
+
+    # Populate the results in the dictionary
+    for rgb, k, barycenter in results:
+        bar_wavelet_coeffs_RGB[rgb][k] = barycenter
+
+    return bar_wavelet_coeffs_RGB
+
+def compute_sliced_wass_barycenter_pixels(textures, weights=None):
+    # Initialisation de la texture barycentre
+    barycenter = {}
+    
+    # Noms des canaux RGB
+    RGB = ['R', 'G', 'B']
+    
+    for i, rgb in tqdm(enumerate(RGB)):
+        # Extraire le canal correspondant et le reshaper pour avoir un vecteur colonne
+        channel_textures = [
+            textures[0][:, :, i].astype(np.float64).reshape(-1, 1),  
+            textures[1][:, :, i].astype(np.float64).reshape(-1, 1)  
+        ]
+        print(f'Length of channel {rgb}: {len(channel_textures[0])}')
+
+        # Calculer le barycentre
+        n = int(np.sqrt(channel_textures[0].shape[0]))
+        barycenter_result = compute_sliced_wass_barycenter(channel_textures, rho=weights).reshape(n, n)
+        barycenter[rgb] = barycenter_result
+    
+    return barycenter
+
+def generate_random_directions(dim, num_directions):
+    """
+    Generate a set of random unit directions in a given dimensional space.
+    
+    Parameters:
+    - dim: int, dimension of the space.
+    - num_directions: int, number of random directions to generate.
+    
+    Returns:
+    - Array of shape (num_directions, dim), where each row is a unit vector.
+    """
+    directions = np.random.randn(num_directions, dim)
+    directions /= np.linalg.norm(directions, axis=1, keepdims=True)
+    return directions
+
+def compute_projected_wasserstein(X, Y, directions):
+    """
+    Compute the average Wasserstein distance between two point clouds
+    along specified directions.
+    
+    Parameters:
+    - X, Y: numpy arrays of shape (n_samples, dim), the two datasets to compare.
+    - directions: numpy array of shape (num_directions, dim), the directions for projection.
+    
+    Returns:
+    - Average Wasserstein distance over all directions.
+    """
+    num_directions = directions.shape[0]
+    wasserstein_distances = []
+    
+    for i in range(num_directions):
+        # Project both X and Y onto the current direction
+        proj_X = X @ directions[i]
+        proj_Y = Y @ directions[i]
+        
+        # Sort projections for 1D Wasserstein distance
+        proj_X_sorted = np.sort(proj_X)
+        proj_Y_sorted = np.sort(proj_Y)
+        
+        # Compute 1D Wasserstein distance
+        distance = compute_wasserstein_sliced_distance(proj_X_sorted, proj_Y_sorted)
+        wasserstein_distances.append(distance)
+    
+    # Return the average Wasserstein distance over all directions
+    return np.mean(wasserstein_distances)
+
+def approximate_projection(X, Y, num_directions=50, learning_rate=0.01, num_iterations=100):
+    """
+    Approximate projection of X onto the distribution Y using SGD to minimize
+    the Wasserstein distance.
+    
+    Parameters:
+    - X: numpy array of shape (n_samples, dim), the data to project.
+    - Y: numpy array of shape (n_samples, dim), the target distribution.
+    - num_directions: int, the number of random directions for slicing.
+    - learning_rate: float, the SGD step size.
+    - num_iterations: int, the number of SGD iterations.
+    
+    Returns:
+    - X_proj: numpy array, the approximate projection of X onto Y.
+    """
+    # Make a copy of X to avoid modifying the original data
+    X_proj = X.copy()
+    dim = X.shape[1]
+    
+    for iteration in range(num_iterations):
+        # Generate random directions
+        directions = generate_random_directions(dim, num_directions)
+        
+        # Compute gradient: here, we approximate by measuring the Wasserstein distance
+        loss = compute_projected_wasserstein(X_proj, Y, directions)
+        
+        # Update X_proj using a gradient approximation with respect to Wasserstein distance
+        for i in range(num_directions):
+            # Project X and Y onto the current direction
+            proj_X = X_proj @ directions[i]
+            proj_Y = Y @ directions[i]
+            
+            # Compute the difference in projections
+            diff = np.mean(proj_X - proj_Y)
+            
+            # Adjust each point in X_proj along the current direction
+            X_proj -= learning_rate * diff * directions[i]
+        
+        if iteration % 10 == 0:
+            print(f"Iteration {iteration}, Wasserstein loss: {loss}")
+    
+    return X_proj
+
 
