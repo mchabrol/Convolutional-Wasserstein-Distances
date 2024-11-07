@@ -54,7 +54,7 @@ def compute_wavelet_coeffs_barycenter(textures, num_scales=4, num_orientations=4
     bar_wavelet_coeffs_RGB = {rgb: {} for rgb in RGB}  # Initialize each channel's dictionary
 
     # Compute wavelet coefficients for all textures
-    wavelets_coeffs = [compute_3D_wavelets_coeffs(image) for image in textures]
+    wavelets_coeffs = [compute_3D_wavelets_coeffs(image, num_scales, num_orientations) for image in textures]
 
     # Define a helper function to compute barycenter for each color channel and coefficient type
     def compute_barycenter(rgb, k):
@@ -92,28 +92,28 @@ def compute_textures_barycenter(textures):
     bar_wavelet_coeffs_RGB = {rgb: {} for rgb in RGB}  # Initialize each channel's dictionary
 
     # Compute wavelet coefficients for all textures
-    wavelets_coeffs = [compute_3D_wavelets_coeffs(image) for image in textures]
 
     # Define a helper function to compute barycenter for each color channel and coefficient type
-    def compute_barycenter(rgb, k):
-        distributions = [w[rgb][k].reshape(-1, 1) for w in wavelets_coeffs]
-        n = int(np.sqrt(distributions[0].shape[0]))
+    def compute_barycenter_texture(rgb):
+        # Iterate over all distributions associated with the specified 'rgb' key
+        distributions = [w[rgb] for w in textures]
+        n = int(np.sqrt(distributions[0].shape))
+        
+        # Compute the barycenter of the distributions
         barycenter = compute_sliced_wass_barycenter(distributions, rho=None).reshape(n, n)
-        return rgb, k, barycenter
+        
+        return rgb, barycenter
 
     # Use Parallel to compute barycenters for each RGB channel and coefficient type in parallel
     results = Parallel(n_jobs=-1)(
-        delayed(compute_barycenter)(rgb, k)
-        for rgb in RGB
-        for k in wavelets_coeffs[0][rgb].keys()
-    )
+        delayed(compute_barycenter_texture)(rgb)
+        for rgb in RGB)
 
     # Populate the results in the dictionary
-    for rgb, k, barycenter in results:
-        bar_wavelet_coeffs_RGB[rgb][k] = barycenter
+    for rgb, barycenter in results:
+        bar_wavelet_coeffs_RGB[rgb] = barycenter
 
     return bar_wavelet_coeffs_RGB
-
 
 
 

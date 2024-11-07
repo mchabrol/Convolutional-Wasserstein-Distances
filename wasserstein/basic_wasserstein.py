@@ -47,7 +47,7 @@ def compute_wasserstein_sliced_distance(x1, x2, n_seed=20, n_projections_arr = n
     return np.mean(np.mean(res, axis=0))
 
 
-def compute_sliced_wass_barycenter(distributions, rho = None, lr = 1e3, k = 200, d = 2, nb_iter_max = 50, xbinit = None):
+def compute_sliced_wass_barycenter(distributions, rho = None, lr = 1e3, k = 200, nb_iter_max = 50, xbinit = None):
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -63,7 +63,7 @@ def compute_sliced_wass_barycenter(distributions, rho = None, lr = 1e3, k = 200,
     xbary_torch = torch.tensor(xbinit).to(device=device).requires_grad_(True)
 
 
-    x_all = np.zeros((nb_iter_max, xbary_torch.shape[0], d))
+    x_all = np.zeros((nb_iter_max, xbary_torch.shape[0], xbary_torch.shape[1]))
 
     loss_iter = []
 
@@ -89,3 +89,12 @@ def compute_sliced_wass_barycenter(distributions, rho = None, lr = 1e3, k = 200,
 
     xb = xbary_torch.clone().detach().cpu().numpy()
     return(xb)
+
+def sliced_projection(X0, Y):
+    """
+    X0 : image a projeter 
+    Y : ce sur quoi on veut projeter 
+    """
+    Y_distrib = [Y]
+    proj = compute_sliced_wass_barycenter(Y_distrib, rho = None, lr = 1e3, k = 200, d = 2, nb_iter_max = 50, xbinit = X0)
+    return(proj)
