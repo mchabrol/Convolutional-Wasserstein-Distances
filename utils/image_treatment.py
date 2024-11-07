@@ -7,12 +7,12 @@ def preprocess_image(image_path, new_size = (256, 256), end = "RGB"):
     image = image.convert(end)
     image = image.resize(new_size)
     #image = image / np.sum(image)  # Normalisation pour que la somme des pixels = 1
-    
-    return image
-
-def image_to_distribution(image, reduc=5):
-    # Réduire la taille des images pour simplifier le traitement
     image_array = np.array(image)
+    return image_array
+
+def image_to_distribution(image_array, reduc=5):
+    # Réduire la taille des images pour simplifier le traitement
+    
     reduce_image = image_array[::reduc, ::reduc]
 
     reduce_image[reduce_image < np.mean(reduce_image)] = 0 #pour revenir a un vrai noir 
