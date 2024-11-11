@@ -141,7 +141,7 @@ def build_pyramid(image, num_scales=4, num_orientations=4):
 
     return(combined_dict)
 
-def build_pyramid_barycenters(textures, rho, num_scales = 4, num_orientations = 4):
+def build_pyramid_barycenters(pyramid_wn, pyramids, rho, num_scales = 4, num_orientations = 4):
     """
     Computes the optimal transport barycenter of each coefficient (in color/rgb) of the pyramid
     (builds de the pyramid and then computes barycenter).
@@ -156,18 +156,6 @@ def build_pyramid_barycenters(textures, rho, num_scales = 4, num_orientations = 
     - dict: pyramid coefficient of a white noise 
     - dict: Optimal transport barycenter of the barycenter of each coefficient of the pyramid
     """
-
-    #initialization of a noise
-    size = textures[0].shape[0]
-    noise = np.random.randn(size, size, 3)
-
-    #compute pyramid coefficients for each texture
-    pyramids = []
-    for texture in textures:
-        pyramids.append(build_pyramid(texture, num_scales=num_scales, num_orientations=num_orientations)) #returns a dico with pyramid for R,G,B
-    #compute pyramid coefficients for white noise
-    pyramid_wn = build_pyramid(noise, num_scales=num_scales, num_orientations=num_orientations)
-
     #compute barycenter of each pyramid coefficient, in 3D
     pyramid_barycenter = {}
     for key in tqdm(pyramid_wn.keys()):
@@ -175,7 +163,7 @@ def build_pyramid_barycenters(textures, rho, num_scales = 4, num_orientations = 
         pyramid_barycenter[key] = compute_optimal_transport_barycenter(pyramid_wn[key].reshape(-1,3), rho, [x[key].reshape(-1,3) for x in pyramids])
         pyramid_barycenter[key] = pyramid_barycenter[key].reshape(size, size, 3)
     
-    return(pyramid_wn, pyramid_barycenter)
+    return(pyramid_barycenter)
 
 def pyramid_projection(pyramid_wn, pyramid_barycenter):
     """
@@ -199,7 +187,7 @@ def pyramid_projection(pyramid_wn, pyramid_barycenter):
 #mtn je veux reconstruire une image a partir des coefficients de la pyramide
 #je separe les R, G, et B et je construis une image a partir de chaque coeff
 
-def compute_texture_mixing(textures, rho, num_scales = 4, num_orientations = 4):
+def compute_texture_mixing(textures, rho, num_scales = 4, num_orientations = 4, n_iter = 1):
     """
     Computes the optimal transport textures barycenter 
 
@@ -212,46 +200,56 @@ def compute_texture_mixing(textures, rho, num_scales = 4, num_orientations = 4):
     Returns:
     - final_texture (ndarray): textures barycenter
     """
-    
-    #Y_l
-    pyramid_wn, pyramid_barycenter = build_pyramid_barycenters(textures, rho, num_scales = num_scales, num_orientations = num_orientations)
-    
-    #(13), see article
-    pyramid_wn = pyramid_projection(pyramid_wn, pyramid_barycenter)
 
-    pyramid_barycenter_r = {}
-    pyramid_barycenter_g = {}
-    pyramid_barycenter_b = {}
-    for key in pyramid_barycenter.keys(): #pour chaque coefficient (qui est pour l'instant en RGB)
-        #il faut extraire les coefficients pour R, G et B
-        pyramid_barycenter_r[key] = pyramid_wn[key][:,:,0]
-        pyramid_barycenter_g[key] = pyramid_wn[key][:,:,1]
-        pyramid_barycenter_b[key] = pyramid_wn[key][:,:,2]
-
-    #puis on reconstruit les images a partir de chaque pyramide R, G et B
-    size = textures[0].shape[0]
-    noise = np.random.randn(size, size)
-    noisy_pyr = pt.pyramids.SteerablePyramidFreq(noise, height=num_scales, order=num_orientations-1)
-
-    noisy_pyr.pyr_coeffs = pyramid_barycenter_r
-    reconstructed_pyr_r = noisy_pyr.recon_pyr()
-    noisy_pyr.pyr_coeffs = pyramid_barycenter_g
-    reconstructed_pyr_g = noisy_pyr.recon_pyr()
-    noisy_pyr.pyr_coeffs = pyramid_barycenter_b
-    reconstructed_pyr_b = noisy_pyr.recon_pyr()
-
-    #f_tilde(k)
-    reconstructed_pyr = np.stack((reconstructed_pyr_r, reconstructed_pyr_g, reconstructed_pyr_b), axis = -1)
-
-
+    #Initialization of a noise
     size = textures[0].shape[0]
     noise = np.random.randn(size, size, 3)
 
-    #calcul de Y
-    rgb_barycenter = compute_optimal_transport_barycenter(noise.reshape(-1, 3), rho, [x.reshape(-1, 3) for x in textures], iterations=100).reshape(size, size, 3)
+    #Compute Y
+    Y = compute_optimal_transport_barycenter(noise.reshape(-1, 3), rho, [x.reshape(-1, 3) for x in textures], iterations=100).reshape(size, size, 3)
 
-    #f_k+1
-    final_texture = compute_optimal_transport(reconstructed_pyr.reshape(-1,3), rgb_barycenter.reshape(-1, 3),iterations=50).reshape(size, size, 3)
+    #Compute Y_l,j (compute pyramid coefficients for each texture)
+    pyramids = []
+    for texture in textures:
+        pyramids.append(build_pyramid(texture, num_scales=num_scales, num_orientations=num_orientations)) #returns a dico with pyramid for R,G,B
+    #compute pyramid coefficients for white noise
+    pyramid_wn = build_pyramid(noise, num_scales=num_scales, num_orientations=num_orientations)
 
+    #Compute Y_l (= pyramid_barycenter)
+    pyramid_barycenter = build_pyramid_barycenters(pyramid_wn, pyramids, rho, num_scales = num_scales, num_orientations = num_orientations)
+    
+    
+    #(13), see article
+    #noise = spectrum_constraint(noise, Y)
+    for _ in range(n_iter):
+        pyramid_wn = build_pyramid(noise, num_scales=4, num_orientations=4)
+        pyramid_wn = pyramid_projection(pyramid_wn, pyramid_barycenter)
+
+        pyramid_barycenter_r = {}
+        pyramid_barycenter_g = {}
+        pyramid_barycenter_b = {}
+        for key in pyramid_barycenter.keys(): #pour chaque coefficient (qui est pour l'instant en RGB)
+            #il faut extraire les coefficients pour R, G et B
+            pyramid_barycenter_r[key] = pyramid_wn[key][:,:,0]
+            pyramid_barycenter_g[key] = pyramid_wn[key][:,:,1]
+            pyramid_barycenter_b[key] = pyramid_wn[key][:,:,2]
+
+        #puis on reconstruit les images a partir de chaque pyramide R, G et B
+        noise_for_pyr = np.random.randn(size, size)
+        noisy_pyr = pt.pyramids.SteerablePyramidFreq(noise_for_pyr, height=num_scales, order=num_orientations-1)
+
+        noisy_pyr.pyr_coeffs = pyramid_barycenter_r
+        reconstructed_pyr_r = noisy_pyr.recon_pyr()
+        noisy_pyr.pyr_coeffs = pyramid_barycenter_g
+        reconstructed_pyr_g = noisy_pyr.recon_pyr()
+        noisy_pyr.pyr_coeffs = pyramid_barycenter_b
+        reconstructed_pyr_b = noisy_pyr.recon_pyr()
+
+        #f_tilde(k)
+        reconstructed_pyr = np.stack((reconstructed_pyr_r, reconstructed_pyr_g, reconstructed_pyr_b), axis = -1)
+
+        #f_k+1
+        final_texture = compute_optimal_transport(reconstructed_pyr.reshape(-1,3), Y.reshape(-1, 3),iterations=50).reshape(size, size, 3)
+        noise = final_texture
+    
     return(final_texture.astype(int))
- 
