@@ -141,29 +141,66 @@ def build_pyramid(image, num_scales=4, num_orientations=4):
 
     return(combined_dict)
 
-def build_pyramid_barycenters(pyramid_wn, pyramids, rho, num_scales = 4, num_orientations = 4):
+# def build_pyramid_barycenters(pyramid_wn, pyramids, rho, num_scales = 4, num_orientations = 4):
+#     """
+#     Computes the optimal transport barycenter of each coefficient (in color/rgb) of the pyramid
+#     (builds de the pyramid and then computes barycenter).
+
+#     Parameters:
+#     - textures (list): List of textures for which we are computing the barycenter
+#     - rho (List): list of weights corresponding to the contribution of each texture
+#     - num_scales (int): number of scales (for pyramid decomposition)
+#     - num_orientations (int): number of orientations (for pyramid decomposition)
+
+#     Returns:
+#     - dict: pyramid coefficient of a white noise 
+#     - dict: Optimal transport barycenter of the barycenter of each coefficient of the pyramid
+#     """
+#     #compute barycenter of each pyramid coefficient, in 3D
+#     pyramid_barycenter = {}
+#     for key in tqdm(pyramid_wn.keys()):
+#         size = pyramid_wn[key].shape[0]
+#         pyramid_barycenter[key] = compute_optimal_transport_barycenter(pyramid_wn[key].reshape(-1,3), rho, [x[key].reshape(-1,3) for x in pyramids])
+#         pyramid_barycenter[key] = pyramid_barycenter[key].reshape(size, size, 3)
+    
+#     return(pyramid_barycenter)
+
+from joblib import Parallel, delayed
+from tqdm import tqdm
+
+def build_pyramid_barycenters(pyramid_wn, pyramids, rho, num_scales=4, num_orientations=4):
     """
-    Computes the optimal transport barycenter of each coefficient (in color/rgb) of the pyramid
-    (builds de the pyramid and then computes barycenter).
+    Computes the optimal transport barycenter of each coefficient (in color/RGB) of the pyramid
+    (builds the pyramid and then computes barycenter).
 
     Parameters:
-    - textures (list): List of textures for which we are computing the barycenter
-    - rho (List): list of weights corresponding to the contribution of each texture
-    - num_scales (int): number of scales (for pyramid decomposition)
-    - num_orientations (int): number of orientations (for pyramid decomposition)
+    - pyramid_wn (dict): Pyramid coefficients of a white noise
+    - pyramids (list of dict): List of pyramids, each containing coefficients for different textures
+    - rho (list): List of weights corresponding to the contribution of each texture
+    - num_scales (int): Number of scales (for pyramid decomposition)
+    - num_orientations (int): Number of orientations (for pyramid decomposition)
 
     Returns:
-    - dict: pyramid coefficient of a white noise 
-    - dict: Optimal transport barycenter of the barycenter of each coefficient of the pyramid
+    - dict: Optimal transport barycenter of each coefficient of the pyramid
     """
-    #compute barycenter of each pyramid coefficient, in 3D
-    pyramid_barycenter = {}
-    for key in tqdm(pyramid_wn.keys()):
-        size = pyramid_wn[key].shape[0]
-        pyramid_barycenter[key] = compute_optimal_transport_barycenter(pyramid_wn[key].reshape(-1,3), rho, [x[key].reshape(-1,3) for x in pyramids])
-        pyramid_barycenter[key] = pyramid_barycenter[key].reshape(size, size, 3)
     
-    return(pyramid_barycenter)
+    def compute_barycenter_for_key(key):
+        size = pyramid_wn[key].shape[0]
+        barycenter = compute_optimal_transport_barycenter(
+            pyramid_wn[key].reshape(-1, 3), rho, [x[key].reshape(-1, 3) for x in pyramids]
+        )
+        return key, barycenter.reshape(size, size, 3)
+
+    # Use Joblib's Parallel to compute each key in parallel
+    results = Parallel(n_jobs=-1)(
+        delayed(compute_barycenter_for_key)(key) for key in tqdm(pyramid_wn.keys())
+    )
+
+    # Aggregate results into the pyramid_barycenter dictionary
+    pyramid_barycenter = {key: barycenter for key, barycenter in results}
+    
+    return pyramid_barycenter
+
 
 def pyramid_projection(pyramid_wn, pyramid_barycenter):
     """
