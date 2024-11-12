@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pyrtools as pt
 from tqdm import tqdm
+from joblib import Parallel, delayed
 
 
 #fonctions importées 
@@ -164,9 +165,6 @@ def build_pyramid(image, num_scales=4, num_orientations=4):
 #         pyramid_barycenter[key] = pyramid_barycenter[key].reshape(size, size, 3)
     
 #     return(pyramid_barycenter)
-
-from joblib import Parallel, delayed
-from tqdm import tqdm
 
 def build_pyramid_barycenters(pyramid_wn, pyramids, rho, num_scales=4, num_orientations=4):
     """
