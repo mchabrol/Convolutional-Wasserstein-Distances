@@ -1,3 +1,4 @@
-# Convolutional-Wasserstein-Distances
+# Wasserstein Barycenter and its Application to Texture Mixing
 
-![image](https://github.com/user-attachments/assets/1eef1da8-8f74-49e7-9ea8-99e61d61bee9)
+![output_water_pebbleground_smallred_reddirt](https://github.com/user-attachments/assets/34191c9c-9c2f-4c5c-9ea8-53bc321ab948)
+
