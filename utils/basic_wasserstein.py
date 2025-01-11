@@ -146,7 +146,7 @@ def compute_sliced_wass_barycenter(distributions, rho = None, lr = 1e3, k = 200,
             x_all[i, :, :] = xbary_torch.clone().detach().cpu().numpy()
 
     xb = xbary_torch.clone().detach().cpu().numpy()
-    return(xb)
+    return(xb, x_all)
 
 def sliced_projection(X0, Y):
     """
