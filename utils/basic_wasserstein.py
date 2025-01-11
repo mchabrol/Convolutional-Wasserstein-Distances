@@ -1,6 +1,4 @@
 ### Utils functions for computing Wasserstein barycenters and distances
-
-
 import numpy as np
 import ot
 import torch
@@ -148,17 +146,42 @@ def compute_sliced_wass_barycenter(distributions, rho = None, lr = 1e3, k = 200,
     xb = xbary_torch.clone().detach().cpu().numpy()
     return(xb, x_all)
 
-def sliced_projection(X0, Y):
-    """
-    Projects an image onto a target distribution using the Sliced Wasserstein Barycenter.
 
-    Args:
-        X0 (ndarray): Initial image to be projected, shape `(n_samples, n_features)`.
-        Y (ndarray): Target distribution, shape `(m_samples, n_features)`.
+def compute_sliced_wass_barycenter_gif(distributions, rho=None, lr=1e3, k=200, nb_iter_max=50, xbinit=None):
+    """ Compute sliced wasserstein barycenter for the .gif creation"""
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    Returns:
-        ndarray: Projected image, shape `(n_samples, n_features)`.
-    """
-    Y_distrib = [Y]
-    proj = compute_sliced_wass_barycenter(Y_distrib, rho = None, lr = 1e3, k = 200, d = 2, nb_iter_max = 50, xbinit = X0)
-    return(proj)
+    x_torch = [torch.tensor(x).to(device=device) for x in distributions]
+
+    if rho is None: 
+        n = len(distributions)
+        rho = n * [1 / n]
+    
+    if xbinit is None:
+        xbinit = np.random.normal(0., 1., distributions[0].shape)
+    xbary_torch = torch.tensor(xbinit).to(device=device).requires_grad_(True)
+
+    x_all = np.zeros((nb_iter_max, xbary_torch.shape[0], xbary_torch.shape[1]))
+    loss_iter = []
+
+    # generator for random projections
+    gen = torch.Generator(device=device)
+    gen.manual_seed(42)
+
+    for i in range(nb_iter_max):
+        loss = 0
+        for j, x in enumerate(x_torch):
+            loss += rho[j] * ot.sliced_wasserstein_distance(xbary_torch, x, n_projections=50, seed=gen)
+        loss_iter.append(loss.clone().detach().cpu().numpy())
+        loss.backward()
+
+        # Perform gradient descent
+        with torch.no_grad():
+            grad = xbary_torch.grad
+            xbary_torch -= grad * lr  # / (1 + i / 5e1)  # step
+            xbary_torch.grad.zero_()
+            x_all[i, :, :] = xbary_torch.clone().detach().cpu().numpy()
+        lr *= 0.981
+    xb = xbary_torch.clone().detach().cpu().numpy()
+
+    return (xb, x_all)
