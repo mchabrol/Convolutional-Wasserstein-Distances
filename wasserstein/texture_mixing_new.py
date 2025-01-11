@@ -5,96 +5,10 @@ from tqdm import tqdm
 from joblib import Parallel, delayed
 import time 
 
-#fonctions importées 
 
 def dist(x1,x2,y1,y2):
     return np.sqrt((x2-x1)**2+(y2-y1)**2)
 
-# def compute_optimal_transport(X, Y, iterations = 100, projections = 1, return_asg = False):
-#     """
-#     Compute the optimal transport between two point clouds.
-
-#     Parameters:
-#     - X (ndarray): Source point cloud
-#     - Y (ndarray): Target point cloud
-#     - iterations (int): Number of iterations for the optimization process
-#     - projections (int): Number of random projections used in each iteration
-#     - return_asg (bool): If True, return the sorted indices of the final point cloud
-
-#     Returns:
-#     - ndarray: Optimal transport between the source and target point clouds
-#     - (Optional) ndarray: Sorted indices of the final point cloud along with the source and target point clouds
-#     """
-    
-#     Z = X.copy()
-#     N = X.shape[0]
-#     D = X.shape[-1]
-#     lr = 1
-#     if(projections == -1):
-#         projections = D
-    
-#     for i in range(iterations):
-#         grad = 0
-#         for p in range(projections):
-#             theta = np.random.uniform(-1, 1, D)
-#             theta /= np.linalg.norm(theta)
-#             proj_z = Z @ theta
-#             proj_y = Y @ theta
-#             sz = np.argsort(proj_z)
-#             sy = np.argsort(proj_y)
-#             grad += proj_z[sz] - proj_y[sy]
-#         grad = grad.reshape(-1, 1) / projections
-#         grad = grad @ theta.reshape(-1, 1).T
-#         Z[sz] -= lr * grad
-#         lr *= 0.999
-#     if(return_asg):
-#         return Z, sy, sz
-#     return Z
-
-# def compute_optimal_transport_barycenter(X_ini, lambdas, point_clouds, iterations = 1000, projections = 1, return_asg = False):
-#     """
-#     Compute the optimal transport barycenter of multiple point clouds.
-
-#     Parameters:
-#     - X_ini (ndarray): Initial point cloud for the barycenter computation
-#     - lambdas (list): List of weights corresponding to the contribution of each point cloud
-#     - point_clouds (list): List of point clouds (ndarrays) to be averaged
-#     - iterations (int): Number of iterations for the optimization process
-#     - projections (int): Number of random projections used in each iteration
-#     - return_asg (bool): If True, return the sorted indices of the final point cloud
-
-#     Returns:
-#     - ndarray: Optimal transport barycenter of the input point clouds
-#     - (Optional) ndarray: Sorted indices of the final point cloud along with the input point clouds
-#     """
-    
-#     assert 1 - 1e-5 < sum(lambdas) < 1 + 1e-5, 'the sum of the weights must be 1'
-#     Z = X_ini.copy()
-#     N = X_ini.shape[0]
-#     D = X_ini.shape[-1]
-#     lr = 1
-#     if(projections == -1):
-#         projections = D
-    
-#     for i in range(iterations):
-#         grad = np.zeros((N, D))
-#         for p in range(projections):
-#             theta = np.random.uniform(-1, 1, D)
-#             theta /= np.linalg.norm(theta)
-#             for lmb in range(len(lambdas)):
-#                 grad_tmp = 0
-#                 proj_z = Z @ theta
-#                 proj_y = point_clouds[lmb] @ theta
-#                 sz = np.argsort(proj_z)
-#                 sy = np.argsort(proj_y)
-#                 grad_tmp += lambdas[lmb] * (proj_z[sz] - proj_y[sy])
-#                 grad_tmp = grad_tmp.reshape(-1, 1)
-#                 grad += grad_tmp @ theta.reshape(-1, 1).T
-#         Z[sz] -= lr * grad / projections
-#         lr *= 0.999
-#     if(return_asg):
-#         return Z, sy, sz
-#     return Z
 
 def compute_optimal_transport(X, Y, iterations=100, projections=1, return_asg=False, order="one"):
     """
@@ -113,45 +27,48 @@ def compute_optimal_transport(X, Y, iterations=100, projections=1, return_asg=Fa
     """
     Z = X.copy()
     N, D = X.shape
-    lr = 1  # Initial learning rate
+    lr = 1  
     if projections == -1:
-        projections = D  # Use full-dimensional projections if -1 is passed
+        projections = D  
 
     for i in range(iterations):
-        grad = np.zeros((N, D))  # Gradient accumulator
-        H = np.zeros((D, D))    # Hessian accumulator
+        grad = np.zeros((N, D))  # grad
+        H = np.zeros((D, D))    # hessian
         
         for p in range(projections):
-            # Generate random projection direction and normalize
+            # random projection direction and normalize
             theta = np.random.uniform(-1, 1, D)
             theta /= np.linalg.norm(theta)
             
-            # Project points onto theta
+            # project points onto theta
             proj_z = Z @ theta
             proj_y = Y @ theta
             
-            # Sort the projections and get indices
+            # sort the projections and get indices
             sz = np.argsort(proj_z)
             sy = np.argsort(proj_y)
             
-            # Compute the gradient contribution for this projection
+            # compute the gradient contribution for this projection
             grad_contrib = (proj_z[sz] - proj_y[sy]).reshape(-1, 1) * theta.reshape(1, -1)
             grad[sz] += grad_contrib
             
-            # Update Hessian
+            # update Hessian
             H += np.outer(theta, theta)
 
         if order=="one":
             Z -= lr * grad  / projections
         else: 
-            # Compute the pseudo-inverse of the Hessian
+            # compute the pseudo-inverse of the Hessian
             start_time = time.time()
             H_inv = np.linalg.pinv(H)
             end_time = time.time()
-            # print(f"Temps pour calculer np.linalg.pinv(H) : {end_time - start_time:.6f} secondes")            # Update the points using the gradient and Hessian
+            ### Time comparison
+            # print(f"Temps pour calculer np.linalg.pinv(H) : {end_time - start_time:.6f} secondes")  
+            # update the points using the gradient and Hessian
+         
             Z -= lr * (grad @ H_inv) / projections
         
-        # Decay learning rate
+        # decay learning rate
         lr *= 0.999
     
     if return_asg:
@@ -177,21 +94,21 @@ def compute_optimal_transport_barycenter(X_ini, lambdas, point_clouds, iteration
     assert abs(sum(lambdas) - 1) < 1e-5, 'The sum of the weights must be 1'
     Z = X_ini.copy()
     N, D = X_ini.shape
-    lr = 1.0  # Initial learning rate
+    lr = 1.0  # initial learning rate
 
     if projections == -1:
-        projections = D  # Use full-dimensional projections if -1 is passed
+        projections = D  
 
     for i in range(iterations):
-        grad = np.zeros((N, D))  # Gradient accumulator
-        H = np.zeros((D, D))    # Hessian accumulator
+        grad = np.zeros((N, D))  # grad
+        H = np.zeros((D, D))    # Hessian 
 
         for p in range(projections):
-            # Generate a random projection direction and normalize
+            # random projection direction and normalize
             theta = np.random.uniform(-1, 1, D)
             theta /= np.linalg.norm(theta)
 
-            # Project all point clouds onto theta
+            # project all point clouds onto theta
             proj_z = Z @ theta
             grad_proj = np.zeros(N)
 
@@ -200,10 +117,10 @@ def compute_optimal_transport_barycenter(X_ini, lambdas, point_clouds, iteration
                 sz = np.argsort(proj_z)
                 sy = np.argsort(proj_y)
 
-                # Accumulate the gradient contribution for this point cloud
+                # update gradient contribution for this point cloud
                 grad_proj[sz] += lmb * (proj_z[sz] - proj_y[sy])
 
-            # Expand the gradient contribution along the projection direction
+            # expand the gradient contribution along the projection direction as in the paper
             grad += np.outer(grad_proj, theta)
 
             # Update the Hessian
@@ -212,13 +129,13 @@ def compute_optimal_transport_barycenter(X_ini, lambdas, point_clouds, iteration
         if order=="one":
             Z -= lr * grad  / projections
         else: 
-            # Compute the pseudo-inverse of the Hessian
+            # compute the pseudo-inverse of the Hessian
             start_time = time.time()
             H_inv = np.linalg.pinv(H)
             end_time = time.time()
             # print(H.shape)
             # print(f"Temps pour calculer np.linalg.pinv(H) : {end_time - start_time:.6f} secondes")
-            # Update the points using the gradient and Hessian
+            # update the points using the gradient and Hessian
             Z -= lr * (grad @ H_inv) / projections
 
         # Decay the learning rate
@@ -268,36 +185,13 @@ def build_pyramid(image, num_scales=4, num_orientations=4):
     pyramid_b = pt.pyramids.SteerablePyramidFreq(image[:,:,2], height=num_scales, order=num_orientations-1).pyr_coeffs
     
     combined_dict = {}
-    # Parcourir les clés (identiques pour les trois dictionnaires)
+    # Iterate over the keys (identical for the three dictionaries)
     for key in pyramid_r.keys():
-        # Empiler les matrices R, G, B le long d'une nouvelle dimension pour obtenir un array (n, n, 3)
+        # Stack the R, G, B matrices along a new dimension to get an array of shape (n, n, 3)
         combined_dict[key] = np.stack((pyramid_r[key], pyramid_g[key], pyramid_b[key]), axis=-1)
 
     return(combined_dict)
 
-# def build_pyramid_barycenters(pyramid_wn, pyramids, rho, num_scales = 4, num_orientations = 4):
-#     """
-#     Computes the optimal transport barycenter of each coefficient (in color/rgb) of the pyramid
-#     (builds de the pyramid and then computes barycenter).
-
-#     Parameters:
-#     - textures (list): List of textures for which we are computing the barycenter
-#     - rho (List): list of weights corresponding to the contribution of each texture
-#     - num_scales (int): number of scales (for pyramid decomposition)
-#     - num_orientations (int): number of orientations (for pyramid decomposition)
-
-#     Returns:
-#     - dict: pyramid coefficient of a white noise 
-#     - dict: Optimal transport barycenter of the barycenter of each coefficient of the pyramid
-#     """
-#     #compute barycenter of each pyramid coefficient, in 3D
-#     pyramid_barycenter = {}
-#     for key in tqdm(pyramid_wn.keys()):
-#         size = pyramid_wn[key].shape[0]
-#         pyramid_barycenter[key] = compute_optimal_transport_barycenter(pyramid_wn[key].reshape(-1,3), rho, [x[key].reshape(-1,3) for x in pyramids])
-#         pyramid_barycenter[key] = pyramid_barycenter[key].reshape(size, size, 3)
-    
-#     return(pyramid_barycenter)
 
 def build_pyramid_barycenters(pyramid_wn, pyramids, rho, num_scales=4, num_orientations=4):
     """
@@ -351,9 +245,10 @@ def pyramid_projection(pyramid_wn, pyramid_barycenter):
     
     return(pyramid_wn)
 
-#ce que j'ai a ce niveau : les barycentres en couleurs pour chaque coefficient
-#mtn je veux reconstruire une image a partir des coefficients de la pyramide
-#je separe les R, G, et B et je construis une image a partir de chaque coeff
+# What we have at this stage: the color barycenters for each coefficient
+# Now, we want to reconstruct an image from the pyramid coefficients
+# We separate the R, G, and B channels and construct an image from each coefficient
+
 
 def compute_texture_mixing(textures, rho, num_scales = 4, num_orientations = 4, n_iter = 1, order="one"):
     """
@@ -396,13 +291,13 @@ def compute_texture_mixing(textures, rho, num_scales = 4, num_orientations = 4, 
         pyramid_barycenter_r = {}
         pyramid_barycenter_g = {}
         pyramid_barycenter_b = {}
-        for key in pyramid_barycenter.keys(): #pour chaque coefficient (qui est pour l'instant en RGB)
-            #il faut extraire les coefficients pour R, G et B
+        for key in pyramid_barycenter.keys(): # For each coefficient (which is currently in RGB)
+            # We need to extract the coefficients for R, G, and B
             pyramid_barycenter_r[key] = pyramid_wn[key][:,:,0]
             pyramid_barycenter_g[key] = pyramid_wn[key][:,:,1]
             pyramid_barycenter_b[key] = pyramid_wn[key][:,:,2]
 
-        #puis on reconstruit les images a partir de chaque pyramide R, G et B
+        # Then, we reconstruct the images from each pyramid for R, G, and B
         noise_for_pyr = np.random.randn(size, size)
         noisy_pyr = pt.pyramids.SteerablePyramidFreq(noise_for_pyr, height=num_scales, order=num_orientations-1)
 
@@ -421,3 +316,28 @@ def compute_texture_mixing(textures, rho, num_scales = 4, num_orientations = 4, 
         noise = final_texture
     
     return(final_texture.astype(int))
+
+
+# def build_pyramid_barycenters(pyramid_wn, pyramids, rho, num_scales = 4, num_orientations = 4):
+#     """
+#     Computes the optimal transport barycenter of each coefficient (in color/rgb) of the pyramid
+#     (builds de the pyramid and then computes barycenter).
+
+#     Parameters:
+#     - textures (list): List of textures for which we are computing the barycenter
+#     - rho (List): list of weights corresponding to the contribution of each texture
+#     - num_scales (int): number of scales (for pyramid decomposition)
+#     - num_orientations (int): number of orientations (for pyramid decomposition)
+
+#     Returns:
+#     - dict: pyramid coefficient of a white noise 
+#     - dict: Optimal transport barycenter of the barycenter of each coefficient of the pyramid
+#     """
+#     #compute barycenter of each pyramid coefficient, in 3D
+#     pyramid_barycenter = {}
+#     for key in tqdm(pyramid_wn.keys()):
+#         size = pyramid_wn[key].shape[0]
+#         pyramid_barycenter[key] = compute_optimal_transport_barycenter(pyramid_wn[key].reshape(-1,3), rho, [x[key].reshape(-1,3) for x in pyramids])
+#         pyramid_barycenter[key] = pyramid_barycenter[key].reshape(size, size, 3)
+    
+#     return(pyramid_barycenter)

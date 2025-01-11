@@ -167,13 +167,13 @@ def compute_texture_mixing_with_reg(textures, rho, num_scales = 4, num_orientati
         pyramid_barycenter_r = {}
         pyramid_barycenter_g = {}
         pyramid_barycenter_b = {}
-        for key in pyramid_barycenter.keys(): #pour chaque coefficient (qui est pour l'instant en RGB)
-            #il faut extraire les coefficients pour R, G et B
+        for key in pyramid_barycenter.keys(): # For each coefficient (which is currently in RGB)
+            # We need to extract the coefficients for R, G, and B
             pyramid_barycenter_r[key] = pyramid_wn[key][:,:,0]
             pyramid_barycenter_g[key] = pyramid_wn[key][:,:,1]
             pyramid_barycenter_b[key] = pyramid_wn[key][:,:,2]
 
-        #puis on reconstruit les images a partir de chaque pyramide R, G et B
+        # Then, we reconstruct the images from each pyramid for R, G, and B
         noise_for_pyr = np.random.randn(size, size)
         noisy_pyr = pt.pyramids.SteerablePyramidFreq(noise_for_pyr, height=num_scales, order=num_orientations-1)
 
