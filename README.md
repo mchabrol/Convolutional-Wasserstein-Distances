@@ -53,9 +53,22 @@ Wasserstein-Barycenter-Project/
 
 3. Run the notebooks in the **`experiments/`** folder sequentially.
 
+## 🌟 Output examples
+
+- Texture mixing with 4 inputs
+   
 ![Texture_mixing](outputs/interpolation_4_textures.png)
 
+- Texture mixing with and without regularization
+  
 ![Texture_mixing](outputs/output_38.png)
+
+## 📝 License
+
+This project was created by:
+- Marion Chabrol
+- Suzie Grondin
+- Corentin Pernot
 
 ## 🔗 Links
 
