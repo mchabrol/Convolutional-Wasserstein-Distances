@@ -1,8 +1,10 @@
 # Wasserstein Barycenter and its Application to Texture Mixing
 
+![Texture_mixing](outputs/blue_golden_frontpage_article.png)
+
 This project is dedicated to the study of the paper *"Wasserstein Barycenter and its Application to Texture Mixing"*. The objective is to reproduce the results from the paper, analyze its limitations, and propose solutions.
 
-## Project Structure
+## 🛠️ Project Structure
 
 - **`data/`**: Contains all the necessary data (images) required to run the code.
 - **`experiments/`**: Includes notebooks that replicate results, analyze limitations, and propose solutions. These notebooks are structured as follows:
@@ -15,7 +17,7 @@ This project is dedicated to the study of the paper *"Wasserstein Barycenter and
 - **`utils/`**: Contains helper functions used throughout the project.
 - **`wasserstein/`**: Includes functions for calculating Wasserstein distances and barycenters, decomposing/recomposing the texture into coefficients etc.
 
-## Code Architecture
+## 🔧 Code Architecture
 
 ```plaintext
 Wasserstein-Barycenter-Project/  
@@ -38,7 +40,7 @@ Wasserstein-Barycenter-Project/
 └── README.md
 ```                
 
-## How to Run the Project
+## 🚀 How to Run the Project
 
 1. Clone the repository:
    ```bash
@@ -51,4 +53,10 @@ Wasserstein-Barycenter-Project/
 
 3. Run the notebooks in the **`experiments/`** folder sequentially.
 
+![Texture_mixing](outputs/interpolation_4_textures.png)
 
+![Texture_mixing](outputs/output_38.png)
+
+## 🔗 Links
+
+- GitHub Repository: [https://github.com/mchabrol/Convolutional-Wasserstein-Distances](https://github.com/mchabrol/Convolutional-Wasserstein-Distances)
