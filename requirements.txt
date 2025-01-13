@@ -1,0 +1,12 @@
+numpy
+ot
+torch
+Pillow
+pywt
+imageio
+matplotlib
+pyrtools
+tqdm
+joblib
+seaborn
+scikit-image

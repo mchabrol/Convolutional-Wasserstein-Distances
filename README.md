@@ -55,6 +55,10 @@ Wasserstein-Barycenter-Project/
 
 ## 🌟 Output examples
 
+- Projection
+   
+![Projection](outputs/projection.gif)
+
 - Texture mixing with 4 inputs
    
 ![Texture_mixing](outputs/interpolation_4_textures.png)
