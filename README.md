@@ -4,6 +4,12 @@
 
 This project is dedicated to the study of the paper *"Wasserstein Barycenter and its Application to Texture Mixing"*. The objective is to reproduce the results from the paper, analyze its limitations, and propose solutions.
 
+## ✅ Code 
+We attempted to code most of the functions from scratch. However, for the initial analyses, we used functions from the `pot` library for the sake of time. Later, we implemented our own functions for texture mixing. All outputs are generated using our own implementations.
+
+
+
+
 ## 🛠️ Project Structure
 
 - **`data/`**: Contains all the necessary data (images) required to run the code.
